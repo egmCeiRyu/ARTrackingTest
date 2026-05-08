@@ -90,6 +90,8 @@
     let camera = null
     let renderer = null
     const raycaster = new THREE.Raycaster()
+    const cameraWorldPosition = new THREE.Vector3()
+    const characterWorldPosition = new THREE.Vector3()
 
     const characterScenePipelineModule = () => ({
       name: 'character-scene',
@@ -131,6 +133,8 @@
 
       onUpdate: () => {
         if (!camera || !reticle || !floor) return
+
+        updateCharacterBillboard()
 
         raycaster.setFromCamera({ x: 0, y: 0 }, camera)
         const intersects = raycaster.intersectObject(floor)
@@ -247,7 +251,7 @@
       const point = intersects[0].point
 
       character.position.copy(point)
-      character.lookAt(camera.position.x, character.position.y, camera.position.z)
+      updateCharacterBillboard(true)
       character.visible = true
 
       reticle.visible = false
@@ -264,11 +268,35 @@
       point.y = Math.max(0, camera.position.y - 1.2)
 
       character.position.copy(point)
-      character.lookAt(camera.position.x, character.position.y, camera.position.z)
       character.visible = true
+      updateCharacterBillboard(true)
 
       reticle.visible = false
       document.body.classList.add('placed')
+    }
+
+    function updateCharacterBillboard(snap = false) {
+      if (!character || !character.visible || !camera) return
+
+      camera.getWorldPosition(cameraWorldPosition)
+      character.getWorldPosition(characterWorldPosition)
+
+      const targetY = Math.atan2(
+        cameraWorldPosition.x - characterWorldPosition.x,
+        cameraWorldPosition.z - characterWorldPosition.z
+      )
+
+      if (snap) {
+        character.rotation.set(0, targetY, 0)
+        return
+      }
+
+      const delta = Math.atan2(
+        Math.sin(targetY - character.rotation.y),
+        Math.cos(targetY - character.rotation.y)
+      )
+
+      character.rotation.y += delta * 0.12
     }
 
     const onxrloaded = () => {
