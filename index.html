@@ -1,18 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-
-  <title>AR Photo Frame</title>
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  />
-
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WebXR AR Character</title>
 
   <style>
     html,
@@ -21,42 +12,12 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: transparent;
+      background: #000;
+      color: #fff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    a-scene {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      background: transparent !important;
-      z-index: 1;
-    }
-
-    video {
-      position: fixed !important;
-      inset: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      object-fit: cover !important;
-      z-index: 0 !important;
-    }
-
-    canvas,
-    .a-canvas {
-      background: transparent !important;
-    }
-
-    .mindar-ui-scanning.hidden,
-    .mindar-ui-loading.hidden,
-    .mindar-ui-overlay.hidden,
-    body.marker-found .mindar-ui-scanning,
-    body.marker-found .mindar-ui-loading,
-    body.marker-found .mindar-ui-overlay {
-      display: none !important;
-    }
-
-    .tracking-status {
+    #status {
       position: fixed;
       left: 50%;
       bottom: 24px;
@@ -67,198 +28,234 @@
       border: 1px solid rgba(255, 255, 255, 0.24);
       border-radius: 8px;
       background: rgba(8, 10, 14, 0.72);
-      color: white;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 14px;
       line-height: 1.35;
       text-align: center;
       backdrop-filter: blur(10px);
       pointer-events: none;
     }
+
+    #unsupported {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: #10131a;
+      text-align: center;
+    }
+
+    #unsupported.visible {
+      display: grid;
+    }
   </style>
 </head>
 
 <body>
+  <div id="status">Toque em Enter AR e aponte para o chao.</div>
+  <div id="unsupported">
+    WebXR AR nao esta disponivel neste navegador. Use Chrome no Android com ARCore, em localhost ou HTTPS.
+  </div>
 
-<script>
-AFRAME.registerComponent('billboard-y', {
-  init: function () {
-    this.camera = null
-    this.camPos = new THREE.Vector3()
-    this.objPos = new THREE.Vector3()
-    this.target = new THREE.Object3D()
-    this.targetWorldQuat = new THREE.Quaternion()
-    this.parentWorldQuat = new THREE.Quaternion()
-    this.targetLocalQuat = new THREE.Quaternion()
-  },
-
-  tick: function () {
-    if (!this.camera) {
-      this.camera = document.querySelector('[camera]')
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+      }
     }
+  </script>
 
-    if (!this.camera) return
+  <script type="module">
+    import * as THREE from 'three'
+    import { ARButton } from 'three/addons/webxr/ARButton.js'
 
-    this.camera.object3D.getWorldPosition(this.camPos)
+    const status = document.querySelector('#status')
+    const unsupported = document.querySelector('#unsupported')
 
-    const obj = this.el.object3D
-    obj.getWorldPosition(this.objPos)
+    let camera
+    let scene
+    let renderer
+    let controller
+    let reticle
+    let hitTestSource = null
+    let hitTestSourceRequested = false
+    let character = null
+    let characterPlaced = false
 
-    this.target.position.copy(this.objPos)
-    this.target.lookAt(
-      this.camPos.x,
-      this.objPos.y,
-      this.camPos.z
-    )
+    init()
 
-    this.targetWorldQuat.copy(this.target.quaternion)
+    async function init() {
+      scene = new THREE.Scene()
 
-    if (obj.parent) {
-      obj.parent.getWorldQuaternion(this.parentWorldQuat).invert()
-      this.targetLocalQuat.copy(this.parentWorldQuat).multiply(this.targetWorldQuat)
-    } else {
-      this.targetLocalQuat.copy(this.targetWorldQuat)
-    }
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30)
 
-    obj.quaternion.slerp(this.targetLocalQuat, 0.12)
-  }
-})
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true
+      })
+      renderer.setPixelRatio(window.devicePixelRatio)
+      renderer.setSize(window.innerWidth, window.innerHeight)
+      renderer.xr.enabled = true
+      renderer.outputColorSpace = THREE.SRGBColorSpace
+      document.body.appendChild(renderer.domElement)
 
-AFRAME.registerComponent('smooth-world-anchor', {
-  init: function () {
-    this.worldAnchor = document.querySelector('#worldAnchor')
-    this.pos = new THREE.Vector3()
-    this.quat = new THREE.Quaternion()
-    this.scale = new THREE.Vector3()
-    this.localPos = new THREE.Vector3()
-    this.localQuat = new THREE.Quaternion()
-    this.parentQuat = new THREE.Quaternion()
-    this.hasPose = false
-    this.tracking = false
-    this.locked = false
-    this.lockTimer = null
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 2.4)
+      scene.add(light)
 
-    if (this.worldAnchor) {
-      this.worldAnchor.setAttribute('visible', 'false')
-    }
+      character = await createCharacter()
+      character.visible = false
+      scene.add(character)
 
-    this.el.addEventListener('targetFound', () => {
-      console.log('TARGET FOUND')
+      reticle = createReticle()
+      scene.add(reticle)
 
-      if (this.locked) return
+      controller = renderer.xr.getController(0)
+      controller.addEventListener('select', placeCharacter)
+      scene.add(controller)
 
-      this.tracking = true
-
-      if (this.worldAnchor) {
-        this.worldAnchor.setAttribute('visible', 'true')
+      if (!navigator.xr) {
+        unsupported.classList.add('visible')
+        status.textContent = 'WebXR nao esta disponivel neste navegador.'
+        return
       }
 
-      document
-        .querySelectorAll('.mindar-ui-scanning, .mindar-ui-loading, .mindar-ui-overlay')
-        .forEach((el) => el.classList.add('hidden'))
-      document.body.classList.add('marker-found')
+      const supported = await navigator.xr.isSessionSupported('immersive-ar')
 
-      clearTimeout(this.lockTimer)
-      this.lockTimer = setTimeout(() => {
-        this.locked = true
-        this.tracking = false
-        console.log('WORLD POSITION LOCKED')
-      }, 1800)
-    })
-
-    this.el.addEventListener('targetLost', () => {
-      if (!this.locked) {
-        this.tracking = false
-        clearTimeout(this.lockTimer)
+      if (!supported) {
+        unsupported.classList.add('visible')
+        status.textContent = 'AR nao suportado neste dispositivo.'
+        return
       }
-    })
-  },
 
-  tick: function () {
-    if (!this.tracking || this.locked || !this.worldAnchor) return
+      document.body.appendChild(ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body }
+      }))
 
-    this.el.object3D.getWorldPosition(this.pos)
-    this.el.object3D.getWorldQuaternion(this.quat)
-    this.el.object3D.getWorldScale(this.scale)
-
-    const parent = this.worldAnchor.object3D.parent
-
-    this.localPos.copy(this.pos)
-
-    if (parent) {
-      parent.worldToLocal(this.localPos)
-      parent.getWorldQuaternion(this.parentQuat).invert()
-      this.localQuat.copy(this.parentQuat).multiply(this.quat)
-    } else {
-      this.localQuat.copy(this.quat)
+      renderer.setAnimationLoop(render)
+      window.addEventListener('resize', onWindowResize)
     }
 
-    if (!this.hasPose) {
-      this.worldAnchor.object3D.position.copy(this.localPos)
-      this.worldAnchor.object3D.quaternion.copy(this.localQuat)
-      this.worldAnchor.object3D.scale.copy(this.scale)
-      this.hasPose = true
-      return
+    async function createCharacter() {
+      const texture = await new THREE.TextureLoader().loadAsync('./character.png')
+      texture.colorSpace = THREE.SRGBColorSpace
+
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.01,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+
+      const height = 2.26
+      const width = 1.6
+      const geometry = new THREE.PlaneGeometry(width, height)
+      const mesh = new THREE.Mesh(geometry, material)
+
+      mesh.position.y = height / 2
+
+      const group = new THREE.Group()
+      group.add(mesh)
+
+      return group
     }
 
-    this.worldAnchor.object3D.position.lerp(this.localPos, 0.12)
-    this.worldAnchor.object3D.quaternion.slerp(this.localQuat, 0.12)
-    this.worldAnchor.object3D.scale.lerp(this.scale, 0.12)
-  }
-})
+    function createReticle() {
+      const ring = new THREE.RingGeometry(0.12, 0.16, 32)
+      ring.rotateX(-Math.PI / 2)
 
-</script>
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide
+      })
 
-<a-scene
-  mindar-image="
-    imageTargetSrc: ./target.mind;
-    filterMinCF: 0.01;
-    filterBeta: 0.1;
-  "
-  color-space="sRGB"
-  renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
-  vr-mode-ui="enabled: false"
-  device-orientation-permission-ui="enabled: false"
-  embedded
->
+      const mesh = new THREE.Mesh(ring, material)
+      mesh.matrixAutoUpdate = false
+      mesh.visible = false
 
-  <a-assets>
-    <img id="char" src="./character.png" />
-  </a-assets>
+      return mesh
+    }
 
-  <a-camera
-    position="0 0 0"
-    look-controls="enabled: false"
-  >
-  </a-camera>
+    function placeCharacter() {
+      if (!reticle.visible || !character) return
 
-  <!-- TRACKER -->
-  <a-entity
-    id="marker"
-    mindar-image-target="targetIndex: 0"
-    smooth-world-anchor>
-  </a-entity>
+      const position = new THREE.Vector3()
+      const quaternion = new THREE.Quaternion()
+      const scale = new THREE.Vector3()
 
-  <a-entity id="worldAnchor" visible="false">
-    <a-plane
-      id="character"
-      position="0 0.565 0.12"
-      width="1.6"
-      height="2.26"
-      material="
-        shader: flat;
-        src: #char;
-        transparent: true;
-        alphaTest: 0.01;
-        opacity: 1;
-        depthWrite: false;
-        side: double;
-      "
-      billboard-y>
-    </a-plane>
-  </a-entity>
+      reticle.matrix.decompose(position, quaternion, scale)
 
-</a-scene>
+      character.position.copy(position)
+      character.quaternion.copy(quaternion)
 
+      const cameraWorldPosition = new THREE.Vector3()
+      camera.getWorldPosition(cameraWorldPosition)
+      character.lookAt(cameraWorldPosition.x, character.position.y, cameraWorldPosition.z)
+
+      character.visible = true
+      characterPlaced = true
+      status.textContent = 'Personagem fixo no mundo 3D.'
+    }
+
+    function render(timestamp, frame) {
+      if (frame) {
+        const referenceSpace = renderer.xr.getReferenceSpace()
+        const session = renderer.xr.getSession()
+
+        if (!hitTestSourceRequested) {
+          session.requestReferenceSpace('viewer').then((viewerSpace) => {
+            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+              hitTestSource = source
+            })
+          })
+
+          session.addEventListener('end', () => {
+            hitTestSourceRequested = false
+            hitTestSource = null
+            reticle.visible = false
+            status.textContent = 'Toque em Enter AR e aponte para o chao.'
+          })
+
+          hitTestSourceRequested = true
+        }
+
+        if (hitTestSource) {
+          const hitTestResults = frame.getHitTestResults(hitTestSource)
+
+          if (hitTestResults.length) {
+            const hit = hitTestResults[0]
+            const pose = hit.getPose(referenceSpace)
+
+            reticle.visible = true
+            reticle.matrix.fromArray(pose.transform.matrix)
+
+            if (!characterPlaced) {
+              status.textContent = 'Toque na tela para colocar o personagem.'
+            }
+          } else {
+            reticle.visible = false
+
+            if (!characterPlaced) {
+              status.textContent = 'Mova devagar e aponte para uma superficie.'
+            }
+          }
+        }
+      }
+
+      renderer.render(scene, camera)
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight
+      camera.updateProjectionMatrix()
+      renderer.setSize(window.innerWidth, window.innerHeight)
+    }
+  </script>
 </body>
 </html>
