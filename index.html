@@ -72,33 +72,9 @@
 <body>
 
 <script>
-AFRAME.registerComponent('target-state', {
-  init: function () {
-    const status = document.querySelector('[data-tracking-status]')
-
-    this.el.sceneEl.addEventListener('arReady', () => {
-      if (status) status.textContent = 'Aponte a camera para o marcador'
-    })
-
-    this.el.sceneEl.addEventListener('arError', () => {
-      if (status) status.textContent = 'Nao foi possivel abrir a camera'
-    })
-
-    this.el.addEventListener('targetFound', () => {
-      if (status) status.textContent = 'Alvo detectado'
-    })
-
-    this.el.addEventListener('targetLost', () => {
-      if (status) status.textContent = 'Aponte a camera para o marcador'
-    })
-  }
-})
-
 AFRAME.registerComponent('billboard-y', {
   init: function () {
     this.targetQuaternion = new THREE.Quaternion()
-    this.camPos = new THREE.Vector3()
-    this.target = new THREE.Object3D()
   },
 
   tick: function () {
@@ -106,19 +82,23 @@ AFRAME.registerComponent('billboard-y', {
 
     if (!camera) return
 
-    camera.object3D.getWorldPosition(this.camPos)
+    const camPos = new THREE.Vector3()
+
+    camera.object3D.getWorldPosition(camPos)
 
     const obj = this.el.object3D
 
-    this.target.position.copy(obj.position)
+    const target = new THREE.Object3D()
 
-    this.target.lookAt(
-      this.camPos.x,
+    target.position.copy(obj.position)
+
+    target.lookAt(
+      camPos.x,
       obj.position.y,
-      this.camPos.z
+      camPos.z
     )
 
-    this.targetQuaternion.copy(this.target.quaternion)
+    this.targetQuaternion.copy(target.quaternion)
 
     obj.quaternion.slerp(this.targetQuaternion, 0.05)
   }
@@ -126,43 +106,35 @@ AFRAME.registerComponent('billboard-y', {
 
 window.addEventListener('DOMContentLoaded', () => {
   const marker = document.querySelector('#marker')
-  const character = document.querySelector('#character')
-  const scene = document.querySelector('a-scene')
-  const status = document.querySelector('[data-tracking-status]')
+  const worldAnchor = document.querySelector('#worldAnchor')
 
   let locked = false
 
   marker.addEventListener('targetFound', () => {
-    if (locked) return
+    console.log('TARGET FOUND')
+  })
 
-    const worldPos = new THREE.Vector3()
-    const worldQuat = new THREE.Quaternion()
-    const worldScale = new THREE.Vector3()
+  marker.addEventListener('targetUpdated', () => {
+    if (!locked) {
+      const pos = new THREE.Vector3()
+      const quat = new THREE.Quaternion()
 
-    character.object3D.getWorldPosition(worldPos)
-    character.object3D.getWorldQuaternion(worldQuat)
-    character.object3D.getWorldScale(worldScale)
+      marker.object3D.getWorldPosition(pos)
+      marker.object3D.getWorldQuaternion(quat)
 
-    marker.removeChild(character)
-    scene.appendChild(character)
+      worldAnchor.object3D.position.copy(pos)
+      worldAnchor.object3D.quaternion.copy(quat)
+    }
+  })
 
-    character.object3D.position.copy(worldPos)
-    character.object3D.quaternion.copy(worldQuat)
-    character.object3D.scale.copy(worldScale)
-
+  setTimeout(() => {
     locked = true
 
-    if (status) status.textContent = 'Personagem fixado no mundo'
-
-    console.log('Character locked in world')
-  })
+    console.log('WORLD LOCKED')
+  }, 3000)
 })
 
 </script>
-
-<div class="tracking-status" data-tracking-status>
-  Aponte a camera para o marcador
-</div>
 
 <a-scene
   mindar-image="
@@ -173,7 +145,7 @@ window.addEventListener('DOMContentLoaded', () => {
   color-space="sRGB"
   renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
   vr-mode-ui="enabled: false"
-  device-orientation-permission-ui="enabled: true"
+  device-orientation-permission-ui="enabled: false"
   embedded
 >
 
@@ -187,11 +159,14 @@ window.addEventListener('DOMContentLoaded', () => {
   >
   </a-camera>
 
+  <!-- TRACKER -->
   <a-entity
     id="marker"
-    mindar-image-target="targetIndex: 0"
-    target-state>
+    mindar-image-target="targetIndex: 0">
+  </a-entity>
 
+  <!-- WORLD ANCHOR -->
+  <a-entity id="worldAnchor">
     <a-plane
       id="character"
       position="0 0.7 0"
@@ -201,13 +176,12 @@ window.addEventListener('DOMContentLoaded', () => {
         shader: flat;
         src: #char;
         transparent: true;
-        alphaTest: 0.01;
+        alphaTest: 0.5;
         depthWrite: false;
         side: double;
       "
       billboard-y>
     </a-plane>
-
   </a-entity>
 
 </a-scene>
