@@ -96,31 +96,66 @@ AFRAME.registerComponent('target-state', {
 
 AFRAME.registerComponent('billboard-y', {
   init: function () {
-    this.camera = null
+    this.targetQuaternion = new THREE.Quaternion()
     this.camPos = new THREE.Vector3()
-    this.objPos = new THREE.Vector3()
-    this.targetY = 0
+    this.target = new THREE.Object3D()
   },
 
   tick: function () {
-    if (!this.camera) {
-      this.camera = document.querySelector('[camera]')
-    }
+    const camera = document.querySelector('[camera]')
 
-    if (!this.camera) return
+    if (!camera) return
+
+    camera.object3D.getWorldPosition(this.camPos)
 
     const obj = this.el.object3D
 
-    this.camera.object3D.getWorldPosition(this.camPos)
-    obj.getWorldPosition(this.objPos)
+    this.target.position.copy(obj.position)
 
-    this.targetY = Math.atan2(
-      this.camPos.x - this.objPos.x,
-      this.camPos.z - this.objPos.z
+    this.target.lookAt(
+      this.camPos.x,
+      obj.position.y,
+      this.camPos.z
     )
 
-    obj.rotation.set(0, this.targetY, 0)
+    this.targetQuaternion.copy(this.target.quaternion)
+
+    obj.quaternion.slerp(this.targetQuaternion, 0.05)
   }
+})
+
+window.addEventListener('DOMContentLoaded', () => {
+  const marker = document.querySelector('#marker')
+  const character = document.querySelector('#character')
+  const scene = document.querySelector('a-scene')
+  const status = document.querySelector('[data-tracking-status]')
+
+  let locked = false
+
+  marker.addEventListener('targetFound', () => {
+    if (locked) return
+
+    const worldPos = new THREE.Vector3()
+    const worldQuat = new THREE.Quaternion()
+    const worldScale = new THREE.Vector3()
+
+    character.object3D.getWorldPosition(worldPos)
+    character.object3D.getWorldQuaternion(worldQuat)
+    character.object3D.getWorldScale(worldScale)
+
+    marker.removeChild(character)
+    scene.appendChild(character)
+
+    character.object3D.position.copy(worldPos)
+    character.object3D.quaternion.copy(worldQuat)
+    character.object3D.scale.copy(worldScale)
+
+    locked = true
+
+    if (status) status.textContent = 'Personagem fixado no mundo'
+
+    console.log('Character locked in world')
+  })
 })
 
 </script>
@@ -130,7 +165,11 @@ AFRAME.registerComponent('billboard-y', {
 </div>
 
 <a-scene
-  mindar-image="imageTargetSrc: ./target.mind;"
+  mindar-image="
+    imageTargetSrc: ./target.mind;
+    filterMinCF: 0.01;
+    filterBeta: 0.1;
+  "
   color-space="sRGB"
   renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
   vr-mode-ui="enabled: false"
@@ -148,23 +187,26 @@ AFRAME.registerComponent('billboard-y', {
   >
   </a-camera>
 
-  <a-entity mindar-image-target="targetIndex: 0" target-state>
+  <a-entity
+    id="marker"
+    mindar-image-target="targetIndex: 0"
+    target-state>
 
-    <a-entity position="0 0.58 0.03" billboard-y>
-      <a-plane
-        position="0 0 0"
-        width="0.74"
-        height="1.05"
-        material="
-          shader: flat;
-          src: #char;
-          transparent: true;
-          alphaTest: 0.01;
-          depthWrite: false;
-          side: double;
-        ">
-      </a-plane>
-    </a-entity>
+    <a-plane
+      id="character"
+      position="0 0.7 0"
+      width="0.5"
+      height="0.8"
+      material="
+        shader: flat;
+        src: #char;
+        transparent: true;
+        alphaTest: 0.01;
+        depthWrite: false;
+        side: double;
+      "
+      billboard-y>
+    </a-plane>
 
   </a-entity>
 
