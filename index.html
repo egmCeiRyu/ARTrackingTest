@@ -95,9 +95,13 @@ AFRAME.registerComponent('billboard-y', {
       position="0 0.8 0"
       width="0.7"
       height="1.2"
-      material="src: #char; transparent: true"
-      billboard-y
-    >
+      material="
+        src: #char;
+        transparent: true;
+        alphaTest: 0.5;
+        side: double;
+      "
+      billboard-y>
     </a-plane>
 
   </a-entity>
