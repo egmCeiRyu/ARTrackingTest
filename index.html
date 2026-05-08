@@ -73,10 +73,7 @@ AFRAME.registerComponent('billboard-y', {
     this.camera = null
     this.camPos = new THREE.Vector3()
     this.objPos = new THREE.Vector3()
-    this.target = new THREE.Object3D()
-    this.targetWorldQuat = new THREE.Quaternion()
-    this.parentWorldQuat = new THREE.Quaternion()
-    this.targetLocalQuat = new THREE.Quaternion()
+    this.targetY = 0
   },
 
   tick: function () {
@@ -91,24 +88,12 @@ AFRAME.registerComponent('billboard-y', {
     this.camera.object3D.getWorldPosition(this.camPos)
     obj.getWorldPosition(this.objPos)
 
-    this.target.position.copy(this.objPos)
-    this.target.lookAt(
-      this.camPos.x,
-      this.objPos.y,
-      this.camPos.z
+    this.targetY = Math.atan2(
+      this.camPos.x - this.objPos.x,
+      this.camPos.z - this.objPos.z
     )
-    this.targetWorldQuat.copy(this.target.quaternion)
 
-    if (obj.parent) {
-      obj.parent.getWorldQuaternion(this.parentWorldQuat).invert()
-      this.targetLocalQuat.copy(this.parentWorldQuat).multiply(this.targetWorldQuat)
-    } else {
-      this.targetLocalQuat.copy(this.targetWorldQuat)
-    }
-
-    if (obj.quaternion.angleTo(this.targetLocalQuat) < 0.01) return
-
-    obj.quaternion.slerp(this.targetLocalQuat, 0.06)
+    obj.rotation.set(0, this.targetY, 0)
   }
 })
 
@@ -119,15 +104,9 @@ AFRAME.registerComponent('billboard-y', {
 </div>
 
 <a-scene
-  mindar-image="
-    imageTargetSrc: ./target.mind;
-    filterMinCF: 0.0001;
-    filterBeta: 0.001;
-    warmupTolerance: 5;
-    missTolerance: 5;
-  "
+  mindar-image="imageTargetSrc: ./target.mind;"
   color-space="sRGB"
-  renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
+  renderer="colorManagement: true; physicallyCorrectLights: true;"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: true"
   embedded
@@ -146,13 +125,19 @@ AFRAME.registerComponent('billboard-y', {
   <a-entity mindar-image-target="targetIndex: 0" target-state>
 
     <a-entity position="0 0.58 0.03" billboard-y>
-      <a-image
+      <a-plane
         position="0 0 0"
         width="0.74"
         height="1.05"
-        src="#char"
-        material="shader: flat; transparent: true; alphaTest: 0.001; depthWrite: false; side: double;">
-      </a-image>
+        material="
+          shader: flat;
+          src: #char;
+          transparent: true;
+          alphaTest: 0.01;
+          depthWrite: false;
+          side: double;
+        ">
+      </a-plane>
     </a-entity>
 
   </a-entity>
