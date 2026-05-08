@@ -117,7 +117,9 @@
         scene.add(character)
 
         xrCanvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false })
-        xrCanvas.addEventListener('select', placeCharacter, true)
+        xrCanvas.addEventListener('select', placeCharacterFromSelect, true)
+        xrCanvas.addEventListener('touchend', placeCharacterFromTouch, { passive: false })
+        xrCanvas.addEventListener('click', placeCharacterFromClick, true)
 
         XR8.XrController.updateCameraProjectionMatrix({
           origin: camera.position,
@@ -198,17 +200,47 @@
       return mesh
     }
 
-    function placeCharacter(event) {
+    function placeCharacterFromSelect(event) {
       if (!character || !camera || !floor) return
 
       const tapPosition = event.position || { x: 0, y: 0 }
+      placeCharacterAtScreenPosition(tapPosition)
+    }
+
+    function placeCharacterFromTouch(event) {
+      event.preventDefault()
+
+      if (!event.changedTouches || !event.changedTouches.length) return
+
+      const touch = event.changedTouches[0]
+      placeCharacterAtClientPosition(touch.clientX, touch.clientY)
+    }
+
+    function placeCharacterFromClick(event) {
+      placeCharacterAtClientPosition(event.clientX, event.clientY)
+    }
+
+    function placeCharacterAtClientPosition(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect()
+      const tapPosition = {
+        x: ((clientX - rect.left) / rect.width) * 2 - 1,
+        y: -(((clientY - rect.top) / rect.height) * 2 - 1),
+      }
+
+      placeCharacterAtScreenPosition(tapPosition)
+    }
+
+    function placeCharacterAtScreenPosition(tapPosition) {
+      if (!character || !camera || !floor) return
+
       raycaster.setFromCamera(tapPosition, camera)
 
       const intersects = raycaster.intersectObject(floor)
 
       if (!intersects.length) {
-        status.textContent = 'Aponte para o chao e toque novamente.'
-        console.log('No floor intersection')
+        placeCharacterInFrontOfCamera()
+        status.textContent = 'Personagem fixo no mundo.'
+        console.log('No floor intersection, placed in front of camera')
         return
       }
 
@@ -222,6 +254,21 @@
       document.body.classList.add('placed')
       status.textContent = 'Personagem fixo no mundo.'
       console.log('Character placed', point)
+    }
+
+    function placeCharacterInFrontOfCamera() {
+      const direction = new THREE.Vector3()
+      camera.getWorldDirection(direction)
+
+      const point = camera.position.clone().add(direction.multiplyScalar(2))
+      point.y = Math.max(0, camera.position.y - 1.2)
+
+      character.position.copy(point)
+      character.lookAt(camera.position.x, character.position.y, camera.position.z)
+      character.visible = true
+
+      reticle.visible = false
+      document.body.classList.add('placed')
     }
 
     const onxrloaded = () => {
