@@ -3,7 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>WebXR AR Character</title>
+  <title>8th Wall World Character</title>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
+    async
+    crossorigin="anonymous"
+    data-preload-chunks="slam">
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
 
   <style>
     html,
@@ -15,6 +24,15 @@
       background: #000;
       color: #fff;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: none;
+    }
+
+    #camerafeed {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
     #status {
@@ -35,109 +53,94 @@
       pointer-events: none;
     }
 
-    #unsupported {
-      position: fixed;
-      inset: 0;
-      z-index: 20;
-      display: none;
-      place-items: center;
-      padding: 24px;
-      background: #10131a;
-      text-align: center;
-    }
-
-    #unsupported.visible {
-      display: grid;
+    .placed #status {
+      opacity: 0;
+      transition: opacity 0.25s ease;
     }
   </style>
 </head>
 
 <body>
-  <div id="status">Toque em Enter AR e aponte para o chao.</div>
-  <div id="unsupported">
-    WebXR AR nao esta disponivel neste navegador. Use Chrome no Android com ARCore, em localhost ou HTTPS.
-  </div>
+  <canvas id="camerafeed"></canvas>
+  <div id="status">Permita a camera, mova o celular devagar e toque para colocar o personagem.</div>
 
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js"
       }
     }
   </script>
 
   <script type="module">
     import * as THREE from 'three'
-    import { ARButton } from 'three/addons/webxr/ARButton.js'
+
+    window.THREE = THREE
 
     const status = document.querySelector('#status')
-    const unsupported = document.querySelector('#unsupported')
+    const canvas = document.querySelector('#camerafeed')
 
-    let camera
-    let scene
-    let renderer
-    let controller
-    let reticle
-    let hitTestSource = null
-    let hitTestSourceRequested = false
+    const characterHeight = 2.26
+    const characterWidth = 1.6
+
     let character = null
-    let characterPlaced = false
+    let reticle = null
+    let floor = null
+    let scene = null
+    let camera = null
+    let renderer = null
+    const raycaster = new THREE.Raycaster()
 
-    init()
+    const characterScenePipelineModule = () => ({
+      name: 'character-scene',
 
-    async function init() {
-      scene = new THREE.Scene()
+      onStart: async ({ canvas: xrCanvas }) => {
+        const xrScene = XR8.Threejs.xrScene()
 
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30)
+        scene = xrScene.scene
+        camera = xrScene.camera
+        renderer = xrScene.renderer
 
-      renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true
-      })
-      renderer.setPixelRatio(window.devicePixelRatio)
-      renderer.setSize(window.innerWidth, window.innerHeight)
-      renderer.xr.enabled = true
-      renderer.outputColorSpace = THREE.SRGBColorSpace
-      document.body.appendChild(renderer.domElement)
+        renderer.outputColorSpace = THREE.SRGBColorSpace
 
-      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 2.4)
-      scene.add(light)
+        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 2.4)
+        scene.add(light)
 
-      character = await createCharacter()
-      character.visible = false
-      scene.add(character)
+        floor = createPlacementFloor()
+        scene.add(floor)
 
-      reticle = createReticle()
-      scene.add(reticle)
+        reticle = createReticle()
+        scene.add(reticle)
 
-      controller = renderer.xr.getController(0)
-      controller.addEventListener('select', placeCharacter)
-      scene.add(controller)
+        character = await createCharacter()
+        character.visible = false
+        scene.add(character)
 
-      if (!navigator.xr) {
-        unsupported.classList.add('visible')
-        status.textContent = 'WebXR nao esta disponivel neste navegador.'
-        return
-      }
+        xrCanvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false })
+        xrCanvas.addEventListener('select', placeCharacter, true)
 
-      const supported = await navigator.xr.isSessionSupported('immersive-ar')
+        XR8.XrController.updateCameraProjectionMatrix({
+          origin: camera.position,
+          facing: camera.quaternion,
+        })
 
-      if (!supported) {
-        unsupported.classList.add('visible')
-        status.textContent = 'AR nao suportado neste dispositivo.'
-        return
-      }
+        status.textContent = 'Mova o celular devagar e toque no chao para colocar o personagem.'
+      },
 
-      document.body.appendChild(ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
-        domOverlay: { root: document.body }
-      }))
+      onUpdate: () => {
+        if (!camera || !reticle || !floor) return
 
-      renderer.setAnimationLoop(render)
-      window.addEventListener('resize', onWindowResize)
-    }
+        raycaster.setFromCamera({ x: 0, y: 0 }, camera)
+        const intersects = raycaster.intersectObject(floor)
+
+        if (intersects.length) {
+          reticle.visible = true
+          reticle.position.copy(intersects[0].point)
+        } else {
+          reticle.visible = false
+        }
+      },
+    })
 
     async function createCharacter() {
       const texture = await new THREE.TextureLoader().loadAsync('./character.png')
@@ -148,15 +151,12 @@
         transparent: true,
         alphaTest: 0.01,
         depthWrite: false,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
       })
 
-      const height = 2.26
-      const width = 1.6
-      const geometry = new THREE.PlaneGeometry(width, height)
+      const geometry = new THREE.PlaneGeometry(characterWidth, characterHeight)
       const mesh = new THREE.Mesh(geometry, material)
-
-      mesh.position.y = height / 2
+      mesh.position.y = characterHeight / 2
 
       const group = new THREE.Group()
       group.add(mesh)
@@ -164,98 +164,83 @@
       return group
     }
 
-    function createReticle() {
-      const ring = new THREE.RingGeometry(0.12, 0.16, 32)
-      ring.rotateX(-Math.PI / 2)
+    function createPlacementFloor() {
+      const geometry = new THREE.PlaneGeometry(200, 200)
+      geometry.rotateX(-Math.PI / 2)
 
       const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.85,
-        side: THREE.DoubleSide
+        opacity: 0,
+        depthWrite: false,
       })
 
-      const mesh = new THREE.Mesh(ring, material)
-      mesh.matrixAutoUpdate = false
+      const mesh = new THREE.Mesh(geometry, material)
       mesh.visible = false
 
       return mesh
     }
 
-    function placeCharacter() {
-      if (!reticle.visible || !character) return
+    function createReticle() {
+      const geometry = new THREE.RingGeometry(0.14, 0.18, 40)
+      geometry.rotateX(-Math.PI / 2)
 
-      const position = new THREE.Vector3()
-      const quaternion = new THREE.Quaternion()
-      const scale = new THREE.Vector3()
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+      })
 
-      reticle.matrix.decompose(position, quaternion, scale)
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.visible = false
 
-      character.position.copy(position)
-      character.quaternion.copy(quaternion)
-
-      const cameraWorldPosition = new THREE.Vector3()
-      camera.getWorldPosition(cameraWorldPosition)
-      character.lookAt(cameraWorldPosition.x, character.position.y, cameraWorldPosition.z)
-
-      character.visible = true
-      characterPlaced = true
-      status.textContent = 'Personagem fixo no mundo 3D.'
+      return mesh
     }
 
-    function render(timestamp, frame) {
-      if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace()
-        const session = renderer.xr.getSession()
+    function placeCharacter(event) {
+      if (!character || !camera || !floor) return
 
-        if (!hitTestSourceRequested) {
-          session.requestReferenceSpace('viewer').then((viewerSpace) => {
-            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-              hitTestSource = source
-            })
-          })
+      const tapPosition = event.position || { x: 0, y: 0 }
+      raycaster.setFromCamera(tapPosition, camera)
 
-          session.addEventListener('end', () => {
-            hitTestSourceRequested = false
-            hitTestSource = null
-            reticle.visible = false
-            status.textContent = 'Toque em Enter AR e aponte para o chao.'
-          })
+      const intersects = raycaster.intersectObject(floor)
 
-          hitTestSourceRequested = true
-        }
-
-        if (hitTestSource) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource)
-
-          if (hitTestResults.length) {
-            const hit = hitTestResults[0]
-            const pose = hit.getPose(referenceSpace)
-
-            reticle.visible = true
-            reticle.matrix.fromArray(pose.transform.matrix)
-
-            if (!characterPlaced) {
-              status.textContent = 'Toque na tela para colocar o personagem.'
-            }
-          } else {
-            reticle.visible = false
-
-            if (!characterPlaced) {
-              status.textContent = 'Mova devagar e aponte para uma superficie.'
-            }
-          }
-        }
+      if (!intersects.length) {
+        status.textContent = 'Aponte para o chao e toque novamente.'
+        return
       }
 
-      renderer.render(scene, camera)
+      const point = intersects[0].point
+
+      character.position.copy(point)
+      character.lookAt(camera.position.x, character.position.y, camera.position.z)
+      character.visible = true
+
+      reticle.visible = false
+      document.body.classList.add('placed')
+      status.textContent = 'Personagem fixo no mundo.'
     }
 
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight
-      camera.updateProjectionMatrix()
-      renderer.setSize(window.innerWidth, window.innerHeight)
+    const onxrloaded = () => {
+      XR8.addCameraPipelineModules([
+        XR8.GlTextureRenderer.pipelineModule(),
+        XR8.Threejs.pipelineModule(),
+        XR8.XrController.pipelineModule(),
+        LandingPage.pipelineModule(),
+        XRExtras.FullWindowCanvas.pipelineModule(),
+        XRExtras.Loading.pipelineModule(),
+        XRExtras.RuntimeError.pipelineModule(),
+        characterScenePipelineModule(),
+      ])
+
+      XR8.run({
+        canvas,
+        allowedDevices: XR8.XrConfig.device().ANY,
+      })
     }
+
+    window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
   </script>
 </body>
 </html>
