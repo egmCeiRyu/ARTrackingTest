@@ -176,7 +176,7 @@
       })
 
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.visible = false
+      mesh.visible = true
 
       return mesh
     }
@@ -208,6 +208,7 @@
 
       if (!intersects.length) {
         status.textContent = 'Aponte para o chao e toque novamente.'
+        console.log('No floor intersection')
         return
       }
 
@@ -220,6 +221,7 @@
       reticle.visible = false
       document.body.classList.add('placed')
       status.textContent = 'Personagem fixo no mundo.'
+      console.log('Character placed', point)
     }
 
     const onxrloaded = () => {
