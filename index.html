@@ -47,6 +47,15 @@
       background: transparent !important;
     }
 
+    .mindar-ui-scanning.hidden,
+    .mindar-ui-loading.hidden,
+    .mindar-ui-overlay.hidden,
+    body.marker-found .mindar-ui-scanning,
+    body.marker-found .mindar-ui-loading,
+    body.marker-found .mindar-ui-overlay {
+      display: none !important;
+    }
+
     .tracking-status {
       position: fixed;
       left: 50%;
@@ -104,34 +113,58 @@ AFRAME.registerComponent('billboard-y', {
   }
 })
 
-window.addEventListener('DOMContentLoaded', () => {
-  const marker = document.querySelector('#marker')
-  const worldAnchor = document.querySelector('#worldAnchor')
+AFRAME.registerComponent('lock-world-anchor', {
+  init: function () {
+    this.worldAnchor = document.querySelector('#worldAnchor')
+    this.pos = new THREE.Vector3()
+    this.quat = new THREE.Quaternion()
+    this.tracking = false
+    this.locked = false
+    this.lockTimer = null
 
-  let locked = false
-
-  marker.addEventListener('targetFound', () => {
-    console.log('TARGET FOUND')
-  })
-
-  marker.addEventListener('targetUpdated', () => {
-    if (!locked) {
-      const pos = new THREE.Vector3()
-      const quat = new THREE.Quaternion()
-
-      marker.object3D.getWorldPosition(pos)
-      marker.object3D.getWorldQuaternion(quat)
-
-      worldAnchor.object3D.position.copy(pos)
-      worldAnchor.object3D.quaternion.copy(quat)
+    if (this.worldAnchor) {
+      this.worldAnchor.setAttribute('visible', 'false')
     }
-  })
 
-  setTimeout(() => {
-    locked = true
+    this.el.addEventListener('targetFound', () => {
+      console.log('TARGET FOUND')
 
-    console.log('WORLD LOCKED')
-  }, 3000)
+      this.tracking = true
+      this.locked = false
+
+      if (this.worldAnchor) {
+        this.worldAnchor.setAttribute('visible', 'true')
+      }
+
+      document
+        .querySelectorAll('.mindar-ui-scanning, .mindar-ui-loading, .mindar-ui-overlay')
+        .forEach((el) => el.classList.add('hidden'))
+      document.body.classList.add('marker-found')
+
+      clearTimeout(this.lockTimer)
+      this.lockTimer = setTimeout(() => {
+        this.locked = true
+        this.tracking = false
+        console.log('WORLD LOCKED')
+      }, 3000)
+    })
+
+    this.el.addEventListener('targetLost', () => {
+      if (!this.locked) {
+        this.tracking = false
+      }
+    })
+  },
+
+  tick: function () {
+    if (!this.tracking || this.locked || !this.worldAnchor) return
+
+    this.el.object3D.getWorldPosition(this.pos)
+    this.el.object3D.getWorldQuaternion(this.quat)
+
+    this.worldAnchor.object3D.position.copy(this.pos)
+    this.worldAnchor.object3D.quaternion.copy(this.quat)
+  }
 })
 
 </script>
@@ -162,11 +195,12 @@ window.addEventListener('DOMContentLoaded', () => {
   <!-- TRACKER -->
   <a-entity
     id="marker"
-    mindar-image-target="targetIndex: 0">
+    mindar-image-target="targetIndex: 0"
+    lock-world-anchor>
   </a-entity>
 
   <!-- WORLD ANCHOR -->
-  <a-entity id="worldAnchor">
+  <a-entity id="worldAnchor" visible="false">
     <a-plane
       id="character"
       position="0 0.7 0"
