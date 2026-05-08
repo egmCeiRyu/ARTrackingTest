@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>8th Wall World Character</title>
+  <title>8th Wall ワールドキャラクター</title>
 
   <script
     src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
@@ -62,7 +62,7 @@
 
 <body>
   <canvas id="camerafeed"></canvas>
-  <div id="status">Permita a camera, mova o celular devagar e toque para colocar o personagem.</div>
+  <div id="status">カメラを許可し、端末をゆっくり動かして、画面をタップしてください。</div>
 
   <script type="importmap">
     {
@@ -128,7 +128,7 @@
           facing: camera.quaternion,
         })
 
-        status.textContent = 'Mova o celular devagar e toque no chao para colocar o personagem.'
+        status.textContent = '端末をゆっくり動かして、床に向けてタップしてください。'
       },
 
       onUpdate: () => {
@@ -243,7 +243,7 @@
 
       if (!intersects.length) {
         placeCharacterInFrontOfCamera()
-        status.textContent = 'Personagem fixo no mundo.'
+        status.textContent = 'キャラクターを空間に固定しました。'
         console.log('No floor intersection, placed in front of camera')
         return
       }
@@ -256,7 +256,7 @@
 
       reticle.visible = false
       document.body.classList.add('placed')
-      status.textContent = 'Personagem fixo no mundo.'
+      status.textContent = 'キャラクターを空間に固定しました。'
       console.log('Character placed', point)
     }
 
