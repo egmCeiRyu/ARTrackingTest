@@ -126,35 +126,10 @@ AFRAME.registerComponent('billboard-y', {
 
 AFRAME.registerComponent('lock-world-anchor', {
   init: function () {
-    this.worldAnchor = document.querySelector('#worldAnchor')
     this.character = document.querySelector('#character')
-    this.pos = new THREE.Vector3()
-    this.quat = new THREE.Quaternion()
-    this.tracking = false
-    this.locked = false
-    this.lockTimer = null
-
-    if (this.worldAnchor) {
-      this.worldAnchor.setAttribute('visible', 'false')
-    }
 
     this.el.addEventListener('targetFound', () => {
       console.log('TARGET FOUND')
-
-      this.el.object3D.getWorldPosition(this.pos)
-      this.el.object3D.getWorldQuaternion(this.quat)
-
-      if (this.worldAnchor) {
-        this.worldAnchor.object3D.position.copy(this.pos)
-        this.worldAnchor.object3D.quaternion.copy(this.quat)
-      }
-
-      this.tracking = true
-      this.locked = false
-
-      if (this.worldAnchor) {
-        this.worldAnchor.setAttribute('visible', 'true')
-      }
 
       if (this.character) {
         this.character.setAttribute('visible', 'true')
@@ -164,30 +139,7 @@ AFRAME.registerComponent('lock-world-anchor', {
         .querySelectorAll('.mindar-ui-scanning, .mindar-ui-loading, .mindar-ui-overlay')
         .forEach((el) => el.classList.add('hidden'))
       document.body.classList.add('marker-found')
-
-      clearTimeout(this.lockTimer)
-      this.lockTimer = setTimeout(() => {
-        this.locked = true
-        this.tracking = false
-        console.log('WORLD LOCKED')
-      }, 3000)
     })
-
-    this.el.addEventListener('targetLost', () => {
-      if (!this.locked) {
-        this.tracking = true
-      }
-    })
-  },
-
-  tick: function () {
-    if (!this.tracking || this.locked || !this.worldAnchor) return
-
-    this.el.object3D.getWorldPosition(this.pos)
-    this.el.object3D.getWorldQuaternion(this.quat)
-
-    this.worldAnchor.object3D.position.copy(this.pos)
-    this.worldAnchor.object3D.quaternion.copy(this.quat)
   }
 })
 
@@ -221,12 +173,8 @@ AFRAME.registerComponent('lock-world-anchor', {
     id="marker"
     mindar-image-target="targetIndex: 0"
     lock-world-anchor>
-  </a-entity>
-
-  <!-- WORLD ANCHOR -->
-  <a-entity id="worldAnchor" visible="false">
     <a-box
-      position="0 0.85 0"
+      position="0 0 0.08"
       width="0.2"
       height="0.2"
       depth="0.2"
@@ -235,12 +183,12 @@ AFRAME.registerComponent('lock-world-anchor', {
 
     <a-plane
       id="character"
-      position="0 0.85 0.05"
-      width="1.2"
-      height="1.7"
+      position="0 0 0.12"
+      width="0.8"
+      height="1.13"
       material="
         shader: flat;
-        src: url(./character.png);
+        src: #char;
         transparent: true;
         alphaTest: 0.01;
         opacity: 1;
