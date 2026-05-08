@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <title>TestARtracking</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+
+<script>
+AFRAME.registerComponent('billboard-y', {
+  tick: function () {
+    const camera = document.querySelector('[camera]')
+
+    if (!camera) return
+
+    const camPos = new THREE.Vector3()
+    camera.object3D.getWorldPosition(camPos)
+
+    const obj = this.el.object3D
+
+    obj.lookAt(
+      camPos.x,
+      obj.position.y,
+      camPos.z
+    )
+  }
+})
+</script>
+
+<a-scene
+  mindar-image="imageTargetSrc: ./target.mind;"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: true"
+  embedded
+  color-space="sRGB"
+  renderer="colorManagement: true, physicallyCorrectLights"
+>
+
+  <a-assets>
+    <img id="char" src="character.png" />
+  </a-assets>
+
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+  <a-entity mindar-image-target="targetIndex: 0">
+
+    <a-plane
+      position="0 1 0"
+      width="1"
+      height="2"
+      material="src: #char; transparent: true"
+      billboard-y
+    >
+    </a-plane>
+
+  </a-entity>
+
+</a-scene>
+
+</body>
+</html>
