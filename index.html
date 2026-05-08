@@ -124,15 +124,29 @@ AFRAME.registerComponent('billboard-y', {
   }
 })
 
-AFRAME.registerComponent('lock-world-anchor', {
+AFRAME.registerComponent('smooth-world-anchor', {
   init: function () {
-    this.character = document.querySelector('#character')
+    this.worldAnchor = document.querySelector('#worldAnchor')
+    this.pos = new THREE.Vector3()
+    this.quat = new THREE.Quaternion()
+    this.scale = new THREE.Vector3()
+    this.localPos = new THREE.Vector3()
+    this.localQuat = new THREE.Quaternion()
+    this.parentQuat = new THREE.Quaternion()
+    this.hasPose = false
+    this.tracking = false
+
+    if (this.worldAnchor) {
+      this.worldAnchor.setAttribute('visible', 'false')
+    }
 
     this.el.addEventListener('targetFound', () => {
       console.log('TARGET FOUND')
 
-      if (this.character) {
-        this.character.setAttribute('visible', 'true')
+      this.tracking = true
+
+      if (this.worldAnchor) {
+        this.worldAnchor.setAttribute('visible', 'true')
       }
 
       document
@@ -140,6 +154,42 @@ AFRAME.registerComponent('lock-world-anchor', {
         .forEach((el) => el.classList.add('hidden'))
       document.body.classList.add('marker-found')
     })
+
+    this.el.addEventListener('targetLost', () => {
+      this.tracking = false
+    })
+  },
+
+  tick: function () {
+    if (!this.tracking || !this.worldAnchor) return
+
+    this.el.object3D.getWorldPosition(this.pos)
+    this.el.object3D.getWorldQuaternion(this.quat)
+    this.el.object3D.getWorldScale(this.scale)
+
+    const parent = this.worldAnchor.object3D.parent
+
+    this.localPos.copy(this.pos)
+
+    if (parent) {
+      parent.worldToLocal(this.localPos)
+      parent.getWorldQuaternion(this.parentQuat).invert()
+      this.localQuat.copy(this.parentQuat).multiply(this.quat)
+    } else {
+      this.localQuat.copy(this.quat)
+    }
+
+    if (!this.hasPose) {
+      this.worldAnchor.object3D.position.copy(this.localPos)
+      this.worldAnchor.object3D.quaternion.copy(this.localQuat)
+      this.worldAnchor.object3D.scale.copy(this.scale)
+      this.hasPose = true
+      return
+    }
+
+    this.worldAnchor.object3D.position.lerp(this.localPos, 0.12)
+    this.worldAnchor.object3D.quaternion.slerp(this.localQuat, 0.12)
+    this.worldAnchor.object3D.scale.lerp(this.scale, 0.12)
   }
 })
 
@@ -172,7 +222,10 @@ AFRAME.registerComponent('lock-world-anchor', {
   <a-entity
     id="marker"
     mindar-image-target="targetIndex: 0"
-    lock-world-anchor>
+    smooth-world-anchor>
+  </a-entity>
+
+  <a-entity id="worldAnchor" visible="false">
     <a-box
       position="0 0 0.08"
       width="0.2"
