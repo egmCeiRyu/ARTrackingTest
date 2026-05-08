@@ -1,18 +1,32 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <title>TestARtracking</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>AR Billboard Test</title>
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
+    html,
     body {
       margin: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
+      background: black;
+    }
+
+    a-scene {
+      width: 100%;
+      height: 100%;
     }
   </style>
 </head>
@@ -22,11 +36,13 @@
 <script>
 AFRAME.registerComponent('billboard-y', {
   tick: function () {
+
     const camera = document.querySelector('[camera]')
 
     if (!camera) return
 
     const camPos = new THREE.Vector3()
+
     camera.object3D.getWorldPosition(camPos)
 
     const obj = this.el.object3D
@@ -42,25 +58,43 @@ AFRAME.registerComponent('billboard-y', {
 
 <a-scene
   mindar-image="imageTargetSrc: ./target.mind;"
+  color-space="sRGB"
+  renderer="colorManagement: true, physicallyCorrectLights"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: true"
   embedded
-  color-space="sRGB"
-  renderer="colorManagement: true, physicallyCorrectLights"
 >
 
   <a-assets>
-    <img id="char" src="character.png" />
+
+    <!-- TESTE PNG -->
+    <img id="char" src="./character.png" />
+
   </a-assets>
 
-  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+  <a-camera
+    position="0 0 0"
+    look-controls="enabled: false"
+  >
+  </a-camera>
 
+  <!-- IMAGE TARGET -->
   <a-entity mindar-image-target="targetIndex: 0">
 
+    <!-- TESTE BOX -->
+    <a-box
+      position="0 0 0"
+      depth="0.3"
+      height="0.3"
+      width="0.3"
+      color="red">
+    </a-box>
+
+    <!-- BILLBOARD -->
     <a-plane
-      position="0 1 0"
-      width="1"
-      height="2"
+      position="0 0.8 0"
+      width="0.7"
+      height="1.2"
       material="src: #char; transparent: true"
       billboard-y
     >
