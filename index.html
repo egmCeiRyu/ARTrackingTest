@@ -135,6 +135,8 @@ AFRAME.registerComponent('smooth-world-anchor', {
     this.parentQuat = new THREE.Quaternion()
     this.hasPose = false
     this.tracking = false
+    this.locked = false
+    this.lockTimer = null
 
     if (this.worldAnchor) {
       this.worldAnchor.setAttribute('visible', 'false')
@@ -142,6 +144,8 @@ AFRAME.registerComponent('smooth-world-anchor', {
 
     this.el.addEventListener('targetFound', () => {
       console.log('TARGET FOUND')
+
+      if (this.locked) return
 
       this.tracking = true
 
@@ -153,15 +157,25 @@ AFRAME.registerComponent('smooth-world-anchor', {
         .querySelectorAll('.mindar-ui-scanning, .mindar-ui-loading, .mindar-ui-overlay')
         .forEach((el) => el.classList.add('hidden'))
       document.body.classList.add('marker-found')
+
+      clearTimeout(this.lockTimer)
+      this.lockTimer = setTimeout(() => {
+        this.locked = true
+        this.tracking = false
+        console.log('WORLD POSITION LOCKED')
+      }, 1800)
     })
 
     this.el.addEventListener('targetLost', () => {
-      this.tracking = false
+      if (!this.locked) {
+        this.tracking = false
+        clearTimeout(this.lockTimer)
+      }
     })
   },
 
   tick: function () {
-    if (!this.tracking || !this.worldAnchor) return
+    if (!this.tracking || this.locked || !this.worldAnchor) return
 
     this.el.object3D.getWorldPosition(this.pos)
     this.el.object3D.getWorldQuaternion(this.quat)
