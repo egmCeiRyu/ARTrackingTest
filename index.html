@@ -70,21 +70,25 @@ AFRAME.registerComponent('target-state', {
 
 AFRAME.registerComponent('billboard-y', {
   init: function () {
-    this.target = new THREE.Object3D()
-    this.targetRotation = new THREE.Quaternion()
+    this.camera = null
     this.camPos = new THREE.Vector3()
     this.objPos = new THREE.Vector3()
+    this.target = new THREE.Object3D()
+    this.targetWorldQuat = new THREE.Quaternion()
+    this.parentWorldQuat = new THREE.Quaternion()
+    this.targetLocalQuat = new THREE.Quaternion()
   },
 
   tick: function () {
+    if (!this.camera) {
+      this.camera = document.querySelector('[camera]')
+    }
 
-    const camera = document.querySelector('[camera]')
-
-    if (!camera) return
-
-    camera.object3D.getWorldPosition(this.camPos)
+    if (!this.camera) return
 
     const obj = this.el.object3D
+
+    this.camera.object3D.getWorldPosition(this.camPos)
     obj.getWorldPosition(this.objPos)
 
     this.target.position.copy(this.objPos)
@@ -93,11 +97,21 @@ AFRAME.registerComponent('billboard-y', {
       this.objPos.y,
       this.camPos.z
     )
+    this.targetWorldQuat.copy(this.target.quaternion)
 
-    this.targetRotation.copy(this.target.quaternion)
-    obj.quaternion.slerp(this.targetRotation, 0.1)
+    if (obj.parent) {
+      obj.parent.getWorldQuaternion(this.parentWorldQuat).invert()
+      this.targetLocalQuat.copy(this.parentWorldQuat).multiply(this.targetWorldQuat)
+    } else {
+      this.targetLocalQuat.copy(this.targetWorldQuat)
+    }
+
+    if (obj.quaternion.angleTo(this.targetLocalQuat) < 0.01) return
+
+    obj.quaternion.slerp(this.targetLocalQuat, 0.06)
   }
 })
+
 </script>
 
 <div class="tracking-status" data-tracking-status>
@@ -105,9 +119,15 @@ AFRAME.registerComponent('billboard-y', {
 </div>
 
 <a-scene
-  mindar-image="imageTargetSrc: ./target.mind;"
+  mindar-image="
+    imageTargetSrc: ./target.mind;
+    filterMinCF: 0.0001;
+    filterBeta: 0.001;
+    warmupTolerance: 5;
+    missTolerance: 5;
+  "
   color-space="sRGB"
-  renderer="colorManagement: true, physicallyCorrectLights"
+  renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: true"
   embedded
@@ -126,24 +146,13 @@ AFRAME.registerComponent('billboard-y', {
   <a-entity mindar-image-target="targetIndex: 0" target-state>
 
     <a-entity position="0 0.58 0.03" billboard-y>
-      <a-plane
-        position="0 0 0.02"
+      <a-image
+        position="0 0 0"
         width="0.74"
         height="1.05"
-        material="
-          shader: flat;
-          src: #char;
-          transparent: true;
-          alphaTest: 0.01;
-          depthWrite: false;
-          side: double;
-        ">
-      </a-plane>
-
-      <a-plane position="0 0.55 0.01" width="0.84" height="0.035" color="#f4f0e8" material="shader: flat; side: double;"></a-plane>
-      <a-plane position="0 -0.55 0.01" width="0.84" height="0.035" color="#f4f0e8" material="shader: flat; side: double;"></a-plane>
-      <a-plane position="-0.43 0 0.01" width="0.035" height="1.1" color="#f4f0e8" material="shader: flat; side: double;"></a-plane>
-      <a-plane position="0.43 0 0.01" width="0.035" height="1.1" color="#f4f0e8" material="shader: flat; side: double;"></a-plane>
+        src="#char"
+        material="shader: flat; transparent: true; alphaTest: 0.001; depthWrite: false; side: double;">
+      </a-image>
     </a-entity>
 
   </a-entity>
